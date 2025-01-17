@@ -336,7 +336,7 @@ class TDEMSoundingInteract():
             depths = np.r_[0, np.c_[depths, depths].reshape(-1)[:-1]]
         return np.c_[sigmas, depths]
 
-    def set_model(self, conductivity, thicknesses=None):
+    def set_model(self, conductivities, thicknesses=None):
         """Sets the current model to have the given conductivity and thicknesses.
 
         Parameters
@@ -347,8 +347,8 @@ class TDEMSoundingInteract():
             thicknesses of each layer, from the surface downward, in meters.
             if n_layer == 1, this is optional.
         """
-        conductivity = np.atleast_1d(conductivity)
-        n_layer = conductivity.shape[0]
+        conductivities = np.atleast_1d(conductivities)
+        n_layer = conductivities.shape[0]
 
         if n_layer == 1 and thicknesses is None:
             thicknesses = np.array([])
@@ -360,11 +360,11 @@ class TDEMSoundingInteract():
                 f'There were {thicknesses.shape[0]}, but I expected {n_layer - 1}.'
             )
 
-        self._model = self._sigma_thick_to_model(conductivity, thicknesses)
+        self._model = self._sigma_thick_to_model(conductivities, thicknesses)
         self._update_model_plot()
 
         # update the axis limits
-        xlim = [0.95 * conductivity.min(), 1.05 * conductivity.max()]
+        xlim = [0.95 * conductivities.min(), 1.05 * conductivities.max()]
         ylim = [1.05 * self._model[-1, 1], 0.5 * self._model[1, 1]]
 
         self._ax_model.set_xlim(xlim)

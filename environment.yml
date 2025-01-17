@@ -1,0 +1,20 @@
+name: gpgn-318
+channels:
+- conda-forge
+dependencies:
+- python=3.11
+- discretize
+- geoana
+- SimPEG=0.23
+- sympy
+- pandas
+- matplotlib
+- jupyterlab
+- ipywidgets
+- ipympl
+- ipyleaflet
+- pyvista
+- trame
+- trame-vtk
+- trame-vuetify
+- vtk>=9.2
