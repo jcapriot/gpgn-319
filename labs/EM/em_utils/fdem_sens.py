@@ -3,6 +3,8 @@ from simpeg import maps
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colors
+from collections import defaultdict
+nested_dict = lambda: defaultdict(nested_dict)
 
 
 class HalfspaceSensitivity:
@@ -100,18 +102,18 @@ class HalfspaceSensitivity:
         # GEM2
         gem2_frequencies = [450, 1530, 5310, 18330, 63030]
         rx_gem2_hcp = [
-            fdem.receivers.PointMagneticFluxDensitySecondary(locations=[0, 1.6, 0.5], orientation='z', component='real'),
-            fdem.receivers.PointMagneticFluxDensitySecondary(locations=[0, 1.6, 0.5], orientation='z', component='imag'),
+            fdem.receivers.PointMagneticFluxDensitySecondary(locations=[0, 3*1.6, 0.5], orientation='z', component='real'),
+            fdem.receivers.PointMagneticFluxDensitySecondary(locations=[0, 3*1.6, 0.5], orientation='z', component='imag'),
         ]
         rx_gem2_vcp = [
-            fdem.receivers.PointMagneticFluxDensitySecondary(locations=[0, 1.6, 0.5], orientation='x', component='real'),
-            fdem.receivers.PointMagneticFluxDensitySecondary(locations=[0, 1.6, 0.5], orientation='x',
+            fdem.receivers.PointMagneticFluxDensitySecondary(locations=[0, 3*1.6, 0.5], orientation='x', component='real'),
+            fdem.receivers.PointMagneticFluxDensitySecondary(locations=[0, 3*1.6, 0.5], orientation='x',
                                                              component='imag'),
         ]
         src_gem2 = [
-            fdem.sources.MagDipole(rx_gem2_hcp, frequency=freq, location=[0, 0, 0], orientation='z') for freq in gem2_frequencies
+            fdem.sources.MagDipole(rx_gem2_hcp, frequency=freq, location=[0, 0, 0.5], orientation='z') for freq in gem2_frequencies
         ] + [
-            fdem.sources.MagDipole(rx_gem2_vcp, frequency=freq, location=[0, 0, 0], orientation='x') for freq in
+            fdem.sources.MagDipole(rx_gem2_vcp, frequency=freq, location=[0, 0, 0.5], orientation='x') for freq in
             gem2_frequencies
 
         ]
@@ -125,3 +127,30 @@ class HalfspaceSensitivity:
         self.J = self.sim.getJ(sigma)['ds']
         self.sens = self.J[:, :-1]/h
         self.depths = -(self.sim.depth[1:] + self.sim.depth[:-1])/2
+
+    @property
+    def data_map(self):
+        x = nested_dict()
+        i = 0
+        for orient in ['hcp','vcp']:
+            for height in ['surface', 'waist']:
+                for comp in ['real', 'imag']:
+                    x['em31'][orient][height][comp] = i
+                    i += 1
+
+        for orient in ['hcp', 'vcp', 'vca']:
+            for offset in [10, 20, 40]:
+                for comp in ['real', 'imag']:
+                    x['em34'][orient][offset][comp] = i
+                    i += 1
+
+        for orient in ['hcp', 'vcp']:
+            for frequency in [450, 1530, 5310, 18330, 63030]:
+                for comp in ['real','imag']:
+                    x['gem2'][orient][frequency][comp] = i
+                    i += 1
+        return x
+
+        
+                
+            
