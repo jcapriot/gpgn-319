@@ -130,7 +130,8 @@ class HalfspaceSensitivity:
         slider_box = VBox([self.conductivity, self.rx_offset, self.height, self.frequency])
         radio_box = HBox([self.orientation, self.rx_component])
 
-        toggle_box = VBox([slider_box, radio_box, presets])
+        toggle_box = VBox([slider_box, radio_box, presets],
+                          layout=Layout(width="30%"))
 
         self._box = HBox([toggle_box, fig.canvas])
 
@@ -182,7 +183,7 @@ class HalfspaceSensitivity:
             for option, value in options.items():
                 option = getattr(self, option)
                 if isinstance(option, FloatSlider):
-                    set_slider_value(option. value)
+                    set_slider_value(option, value)
                 elif isinstance(option, FloatLogSlider):
                     snap_to_log_slider(option, value)
                 else:
@@ -198,15 +199,15 @@ class HalfspaceSensitivity:
 
 
 PRESETS = {
-    "em31":{"frequency":9800, "rx_offset":3.3, "orientation":"HCP", "rx_component":"imag"},
-    "em34_10m":{"frequency":6400, "rx_offset":10, "orientation":"HCP", "rx_component":"imag"},
-    "em34_20m": {"frequency": 1600, "rx_offset":20, "orientation":"HCP", "rx_component":"imag"},
-    "em34_40m": {"frequency": 400, "rx_offset":40, "orientation":"HCP", "rx_component":"imag"},
-    "gem2_450Hz": {"frequency": 450, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag"},
-    "gem2_1530Hz": {"frequency": 1530, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag"},
-    "gem2_5310Hz": {"frequency": 5310, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag"},
-    "gem2_18330Hz": {"frequency": 18330, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag"},
-    "gem2_63030Hz": {"frequency": 63030, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag"},
+    "em31":{"frequency":9800, "rx_offset":3.3, "orientation":"HCP", "rx_component":"imag", "height":0.5},
+    "em34_10m":{"frequency":6400, "rx_offset":10, "orientation":"HCP", "rx_component":"imag", "height":0},
+    "em34_20m": {"frequency": 1600, "rx_offset":20, "orientation":"HCP", "rx_component":"imag", "height":0},
+    "em34_40m": {"frequency": 400, "rx_offset":40, "orientation":"HCP", "rx_component":"imag", "height":0},
+    "gem2_450Hz": {"frequency": 450, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag", "height":0.5},
+    "gem2_1530Hz": {"frequency": 1530, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag", "height":0.5},
+    "gem2_5310Hz": {"frequency": 5310, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag", "height":0.5},
+    "gem2_18330Hz": {"frequency": 18330, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag", "height":0.5},
+    "gem2_63030Hz": {"frequency": 63030, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag", "height":0.5},
 }
         
                 
