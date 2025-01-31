@@ -43,17 +43,42 @@ class HalfspaceSensitivity:
         self.rx_offset = FloatLogSlider(
             min=-1, max=2,
             step=0.01,
-            continuous_update=False,
-            orientation='vertical',
-            description='Offset between Tx and Rx'
+            continuous_update=True,
+            orientation='horizontal',
+            description='Offset'
         )
 
-        self.rx_orientation = RadioButtons(
-            options=['x', 'y', "z"],
-            description='Rx orientation',
+        self.height = FloatSlider(
+            min=0, max=5,
+            step=0.01,
+            continuous_update=True,
+            orientation='horizontal',
+            description='Height'
+        )
+
+        self.frequency = FloatLogSlider(
+            min=1, max=5.5,
+            step=0.01,
+            continuous_update=True,
+            orientation='horizontal',
+            description='Tx frequency'
+        )
+
+        self.conductivity = FloatLogSlider(
+            min=-5, max=1,
+            value=0.01,
+            step=0.01,
+            continuous_update=True,
+            orientation='horizontal',
+            description='Conductivity'
+        )
+
+        self.orientation = RadioButtons(
+            options=['HCP', 'VCP', "VCA"],
+            description='Orientation',
             disabled=False,
             button_style='',  # 'success', 'info', 'warning', 'danger' or ''
-            tooltips=['x - direction', 'y - direction', 'z - direction'],
+            tooltips=['vertical dipole', 'horizontal dipole', 'horizontal dipole'],
         )
 
         self.rx_component = RadioButtons(
@@ -62,39 +87,6 @@ class HalfspaceSensitivity:
             disabled=False,
             button_style='',  # 'success', 'info', 'warning', 'danger' or ''
             tooltips=['Display the in-phase data', 'Display the quadrature data',],
-        )
-
-        self.height = FloatSlider(
-            min=0, max=5,
-            step=0.01,
-            continuous_update=False,
-            orientation='vertical',
-            description='Height above the surface of the Tx and Rx.'
-        )
-
-        self.frequency = FloatLogSlider(
-            min=1, max=5.5,
-            step=0.01,
-            continuous_update=False,
-            orientation='vertical',
-            description='Tx frequency'
-        )
-
-        self.tx_orientation = RadioButtons(
-            options=['x', 'y', "z"],
-            description='Tx Orienation',
-            disabled=False,
-            button_style='',  # 'success', 'info', 'warning', 'danger' or ''
-            tooltips=['x - direction', 'y - direction', 'z - direction'],
-        )
-
-        self.conductivity = FloatLogSlider(
-            min=-5, max=1,
-            value=0.01,
-            step=0.01,
-            continuous_update=False,
-            orientation='vertical',
-            description='Ground Conductivity'
         )
 
 
@@ -121,54 +113,26 @@ class HalfspaceSensitivity:
                 "gem2_450Hz", "gem2_1530Hz", "gem2_5310Hz", "gem2_18330Hz", "gem2_63030Hz"
             ],
             value='em31',
-            description='Select some preset instrument configurations',
+            description='Presets',
             disabled=False,
-        )
-
-        hcp_button = Button(
-            description='HCP',
-            disabled=False,
-            button_style='',  # 'success', 'info', 'warning', 'danger' or ''
-            tooltip='Set Tx and Rx orientation to horizontal coplanar',
-        )
-
-        vcp_button = Button(
-            description='VCP',
-            disabled=False,
-            button_style='',  # 'success', 'info', 'warning', 'danger' or ''
-            tooltip='Set Tx and Rx orientation to vertical coplanar',
-        )
-
-        vca_button = Button(
-            description='VCA',
-            disabled=False,
-            button_style='',  # 'success', 'info', 'warning', 'danger' or ''
-            tooltip='Set Tx and Rx orientation to vertical coaxial',
         )
 
         presets.observe(lambda change: self.set_preset(change.new), names='value')
-        vca_button.on_click(lambda change: self.set_preset("vca"))
-        hcp_button.on_click(lambda change: self.set_preset("hcp"))
-        vcp_button.on_click(lambda change: self.set_preset("vcp"))
-        vca_button.on_click(lambda change: self.set_preset("vca"))
 
         self.conductivity.observe(self.update_plot, names='value')
         self.rx_offset.observe(self.update_plot, names='value')
         self.height.observe(self.update_plot, names='value')
         self.frequency.observe(self.update_plot, names='value')
-        self.tx_orientation.observe(self.update_plot, names='value')
-        self.rx_orientation.observe(self.update_plot, names='value')
+        self.orientation.observe(self.update_plot, names='value')
         self.rx_component.observe(self.update_plot, names='value')
 
 
-        rx_box = HBox([self.conductivity, self.rx_offset, self.height, self.frequency])
-        tx_box = HBox([ self.tx_orientation, self.rx_orientation, self.rx_component])
+        slider_box = VBox([self.conductivity, self.rx_offset, self.height, self.frequency])
+        radio_box = HBox([self.orientation, self.rx_component])
 
-        orient_buttons = HBox([hcp_button, vcp_button, vca_button])
+        toggle_box = VBox([slider_box, radio_box, presets])
 
-        toggle_box = VBox([rx_box, tx_box, orient_buttons, presets])
-
-        self._box = VBox([toggle_box, fig.canvas])
+        self._box = HBox([toggle_box, fig.canvas])
 
         self._updating_presets = False
 
@@ -186,18 +150,18 @@ class HalfspaceSensitivity:
 
     def calc_sens(self):
         rx_offset = self.rx_offset.value
-        rx_orientation = self.rx_orientation.value
+        orientation = self.orientation.value
+        orientation = {"HCP":"z", "VCP":"x", "VCA":"y"}[orientation]
         rx_component = self.rx_component.value
         height = self.height.value
 
         location = np.r_[0, rx_offset, height]
-        rx = fdem.receivers.PointMagneticFluxDensitySecondary(locations=location, orientation=rx_orientation, component=rx_component)
+        rx = fdem.receivers.PointMagneticFluxDensitySecondary(locations=location, orientation=orientation, component=rx_component)
 
         freq = self.frequency.value
         location = np.r_[0, 0, height]
-        src_orient = self.tx_orientation.value
 
-        src = fdem.sources.MagDipole([rx], location=location, orientation=src_orient, frequency=freq)
+        src = fdem.sources.MagDipole([rx], location=location, orientation=orientation, frequency=freq)
 
         srv = fdem.Survey([src])
         model = np.full(self.n_layers, self.conductivity.value)
@@ -234,18 +198,15 @@ class HalfspaceSensitivity:
 
 
 PRESETS = {
-    "em31":{"frequency":9800, "rx_offset":3.3, "tx_orientation":"z", "rx_orientation":"z", "rx_component":"imag"},
-    "em34_10m":{"frequency":6400, "rx_offset":10, "tx_orientation":"z", "rx_orientation":"z", "rx_component":"imag"},
-    "em34_20m": {"frequency": 1600, "rx_offset":10, "tx_orientation": "z", "rx_orientation": "z", "rx_component":"imag"},
-    "em34_40m": {"frequency": 400, "rx_offset":10, "tx_orientation": "z", "rx_orientation": "z", "rx_component":"imag"},
-    "gem2_450Hz": {"frequency": 450, "rx_offset":1.6, "tx_orientation": "z", "rx_orientation": "z", "rx_component":"imag"},
-    "gem2_1530Hz": {"frequency": 1530, "rx_offset":1.6, "tx_orientation": "z", "rx_orientation": "z", "rx_component":"imag"},
-    "gem2_5310Hz": {"frequency": 5310, "rx_offset":1.6, "tx_orientation": "z", "rx_orientation": "z", "rx_component":"imag"},
-    "gem2_18330Hz": {"frequency": 18330, "rx_offset":1.6, "tx_orientation": "z", "rx_orientation": "z", "rx_component":"imag"},
-    "gem2_63030Hz": {"frequency": 63030, "rx_offset":1.6, "tx_orientation": "z", "rx_orientation": "z", "rx_component":"imag"},
-    "hcp":{"tx_orientation":"z", "rx_orientation":"z"},
-    "vcp":{"tx_orientation":"x", "rx_orientation":"x"},
-    "vca":{"tx_orientation":"y", "rx_orientation":"y"},
+    "em31":{"frequency":9800, "rx_offset":3.3, "orientation":"HCP", "rx_component":"imag"},
+    "em34_10m":{"frequency":6400, "rx_offset":10, "orientation":"HCP", "rx_component":"imag"},
+    "em34_20m": {"frequency": 1600, "rx_offset":20, "orientation":"HCP", "rx_component":"imag"},
+    "em34_40m": {"frequency": 400, "rx_offset":40, "orientation":"HCP", "rx_component":"imag"},
+    "gem2_450Hz": {"frequency": 450, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag"},
+    "gem2_1530Hz": {"frequency": 1530, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag"},
+    "gem2_5310Hz": {"frequency": 5310, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag"},
+    "gem2_18330Hz": {"frequency": 18330, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag"},
+    "gem2_63030Hz": {"frequency": 63030, "rx_offset":1.6, "orientation":"HCP", "rx_component":"imag"},
 }
         
                 
