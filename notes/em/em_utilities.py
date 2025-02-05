@@ -6,6 +6,10 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import SymLogNorm
 import scipy.io
 
+from xml.etree import cElementTree as et
+from collections import defaultdict
+from scipy.constants import mu_0
+
 from ipywidgets import FloatLogSlider, HBox, VBox, Layout, AppLayout, interactive, IntSlider, widget, FloatText, FloatSlider, Checkbox
 
 
@@ -463,3 +467,51 @@ def interactfem3loop():
     )
 
     return Q
+
+
+
+def etree_to_dict(t):
+    d = {t.tag: {} if t.attrib else None}
+    children = list(t)
+    if children:
+        dd = defaultdict(list)
+        for dc in map(etree_to_dict, children):
+            for k, v in dc.items():
+                dd[k].append(v)
+        d = {t.tag: {k:v[0] if len(v) == 1 else v for k, v in dd.items()}}
+    if t.attrib:
+        d[t.tag].update(('@' + k, v) for k, v in t.attrib.items())
+    if t.text:
+        text = t.text.strip()
+        if children or t.attrib:
+            if text:
+              d[t.tag]['#text'] = text
+        else:
+            d[t.tag] = text
+    return d
+
+
+def get_transfer_function(xml_as_dict):
+    Z = []
+    periods = []
+    for period in xml_as_dict['EM_TF']['Data']['Period']:
+        z_period = np.empty((2,2), dtype=complex)
+        for z_comp in period['Z']['value']:
+            name = z_comp["@name"]
+            i = 0 if name[1] == 'x' else 1
+            j = 0 if name[2] == 'x' else 1
+            re, im = z_comp['#text'].split()
+            z = float(re) + 1j * float(im)
+            z_period[i, j] = z
+        Z.append(z_period)
+        periods.append(float(period['@value']))
+    return np.asarray(periods), np.asarray(Z) * 1E3 * mu_0 # Ohms
+
+def read_EMTFXML(filename, return_dict=False):
+    xml_root = et.parse(filename).getroot()
+    xml_as_dict = etree_to_dict(xml_root)
+    T, Z = get_transfer_function(xml_as_dict)
+    if not return_dict:
+        return T, Z
+    else:
+        return T, Z, xml_as_dict
