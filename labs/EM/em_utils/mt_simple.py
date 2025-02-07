@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 import scipy.signal as sig
+from scipy.constants import mu_0
 
 
 class MTSimpleEncoder(json.JSONEncoder):
@@ -331,6 +332,12 @@ def calculate_Z(site, remote=None, bands=None):
     Z = np.stack([zx, zy], axis=1) / bot[:, None, None]
 
     return f, Z
+
+def calc_rho_a(f, Z):
+    
+    om = 2 * np.pi * f
+    rho_a = 1/(mu_0 * om[:, None, None]) * np.abs(Z)**2
+    return rho_a
 
 CLASS_NAME_TO_CLASS = {
     "SimpleBase":SimpleBase,
