@@ -286,6 +286,10 @@ class MTTimeChannelCollection():
             fs.append(channel.split(n_split))
         return type(self)(*fs)
 
+    def orient(self):
+        ex, ey = self.channels[:2]
+        hx, hy = self.channels[2:]
+
 
 class MTFrequencySpectrumCollection():
 
@@ -325,7 +329,7 @@ def calculate_Z(site, remote=None, bands=None):
     f = site.channels[0].frequencies
 
     if bands is not None:
-        f = _band_sum(f, bands)
+        f = _band_sum(f, bands)/np.sum(bands, axis=0)
         func = lambda x : np.sum(_band_sum(x, where=bands), axis=0)
     else:
         func = lambda x : np.sum(x, axis=0)
