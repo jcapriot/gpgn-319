@@ -166,7 +166,7 @@ class MagneticChannel(MTChannel):
 
     def frequency_spectrum(self):
         f_data = np.fft.rfft(self.data)[...,1:]
-        freqs = np.fft.rfftfreq(len(self.data), self.sample_rate)[1:]
+        freqs = np.fft.rfftfreq(self.data.shape[-1], self.sample_rate)[1:]
         f_data *= np.exp(1j * 2 * np.pi * freqs * self.time_delay)
         spec = MagneticSpectrum(f_data, self.azimuth, self.zpk_filter, self.gain, self.start_time, self.sample_rate, time_delay=0)
         return spec
