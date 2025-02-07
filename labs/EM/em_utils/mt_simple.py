@@ -17,47 +17,71 @@ class MTSimpleEncoder(json.JSONEncoder):
             np.savez(temp, arr=obj)
             v_bytes = temp.getvalue()
             temp.close()
-            return base64.b64encode(v_bytes).decode('ascii')
+            return {'__class__':"numpy.ndarray", "data":base64.b64encode(v_bytes).decode('ascii')}
         elif isinstance(obj, complex):
-            return 'complex:'+str(obj)
+            return {'__class__': "complex", "real": obj.real, "imag": obj.imag}
         elif isinstance(obj, datetime.datetime):
-            return 'datetime:'+obj.isoformat()
+            return {'__class__': "datetime.datetime", "isoformat": obj.isoformat()}
         return super().default(obj)
+
+
+def _custom_decode(val):
+    if isinstance(val, str):
+        if val.startswith("ndarray:"):
+            print("decoding ndarray")
+            dat = val.split(":")[1]
+            dat = base64.b64decode(dat.encode('ascii'))
+            temp = io.BytesIO(dat)
+            val = np.load(temp)['arr']
+            temp.close()
+        elif val.startswith("complex:"):
+            print("decoding complex")
+            val = complex(val.split(":")[1])
+        elif val.startswith("datetime:"):
+            print("decoding datetime")
+            val = datetime.datetime.fromisoformat(val.split(":")[1])
+        else:
+            print("doing nothing with", val)
+    return val
 
 class MTSimpleDecoder(json.JSONDecoder):
     def __init__(self, *args, **kwargs):
-        super().__init__(object_hook=self.object_hook, *args, **kwargs)
+        super().__init__(object_hook=self.from_dict, *args, **kwargs)
 
-    def object_hook(self, obj):
-        if isinstance(obj, dict):
-            new_obj = {}
-            for key, val in obj.items():
-                if isinstance(val, str):
-                    if val.startswith("ndarray:"):
-                        dat = val.split(":")[1]
-                        dat = base64.b64decode(dat.encode('ascii'))
-                        temp = io.BytesIO(dat)
-                        val = np.load(temp)['arr']
-                        temp.close()
-                    elif val.startswith("complex:"):
-                        val = complex(val[8:])
-                    elif val.startswith("datetime:"):
-                        val = datetime.datetime.fromisoformat(val[9:])
-                new_obj[key] = val
-            obj = new_obj
-        return obj
+    @staticmethod
+    def from_dict(d):
+        if d.get("__class__") == "numpy.ndarray":
+            dat = d["data"]
+            dat = base64.b64decode(dat.encode('ascii'))
+            temp = io.BytesIO(dat)
+            arr = np.load(temp)['arr']
+            temp.close()
+            return arr
+        elif d.get("__class__") == "complex":
+            return d["real"] + 1j * d["imag"]
+        elif d.get("__class__") == "datetime.datetime":
+            return datetime.datetime.fromisoformat(d["isoformat"])
+        return d
 
 class SimpleBase:
     __slots__ = ['data', 'azimuth', 'zpk_filter', 'gain', 'start_time', 'sample_rate', 'time_delay']
 
-    def __init__(self, data, azimuth, zpk_filter, gain, start_time: datetime.datetime, sample_rate : float, time_delay=0):
+    def __init__(
+            self, data, azimuth, start_time: Union[str, datetime.datetime], sample_rate : float, zpk_filter=None, gain=None, time_delay=0.0
+    ):
         data = np.asarray(data)
         if data.ndim == 1:
             data = data[None, :]
         self.data = data
         self.azimuth = azimuth
+        if zpk_filter is None:
+            zpk_filter = []
         self.zpk_filter = zpk_filter
+        if gain is None:
+            gain = []
         self.gain = gain
+        if isinstance(start_time, str):
+            start_time = datetime.datetime.fromisoformat(start_time)
         self.start_time = start_time
         self.sample_rate = sample_rate
         self.time_delay = time_delay
@@ -72,25 +96,26 @@ class SimpleBase:
             setattr(new, key, value)
         return new
 
-    def assert_equal_configuration(self, other):
+    def validate_equal_configuration(self, other, ignore=None):
         my_attrs = self.__slots__
-        other_attrs = other.__slots__
 
-        same_attrs = my_attrs == other_attrs
-        if same_attrs:
-            for attr in my_attrs:
-                v1 = getattr(self, attr)
-                v2 = getattr(other, attr)
-                if attr == 'data':
-                    if v1.shape != v2.shape:
-                        return False
-                elif v1 != v2:
-                    return False
-            return True
-        return False
+        if ignore is None:
+            ignore = []
+
+        for attr in my_attrs:
+            if attr in ignore:
+                continue
+            v1 = getattr(self, attr)
+            v2 = getattr(other, attr)
+            if attr == 'data':
+                if v1.shape != v2.shape:
+                    raise ValueError("Data shapes not equal")
+            elif v1 != v2:
+                raise ValueError(f"{attr} values are not equal")
+        return True
 
     @property
-    def data_shape(self):
+    def shape(self):
         return self.data.shape
 
     def to_dict(self):
@@ -106,15 +131,12 @@ class SimpleBase:
         with open(file_name, 'w') as f:
             json.dump(self_dict, f, cls=MTSimpleEncoder)
 
-    @classmethod
-    def from_json_string(cls, str):
-        vals = json.loads(str, cls=MTSimpleDecoder)
-        return cls(**vals)
-
 def geographic_orient(x1 : SimpleBase, x2: SimpleBase):
-    # if not x1.assert_equal_configuration(x2):
-    #     raise ValueError("x1 and x2 must have the same configuration.")
-    data_shape = x1.data.shape
+    if not (isinstance(x1, type(x2)) or isinstance(x2, type(x1))):
+        raise TypeError("x1 and x2 must be of same type")
+    x1.validate_equal_configuration(x2, ignore=["azimuth", "time_delay"])
+
+    in_shape = x1.shape
     v_in = np.c_[x1.data.reshape(-1), x2.data.reshape(-1)]
 
     th = np.pi / 2 - x1.azimuth
@@ -126,11 +148,13 @@ def geographic_orient(x1 : SimpleBase, x2: SimpleBase):
     U = np.c_[u1, u2]
 
     r_east_north = np.linalg.solve(U, v_in[..., None])[..., 0]
-    dat1 = r_east_north[..., 0].reshape(data_shape)
-    dat2 = r_east_north[..., 1].reshape(data_shape)
+    dat1 = r_east_north[..., 0].reshape(in_shape)
+    dat2 = r_east_north[..., 1].reshape(in_shape)
 
-    e = x1.update(data=dat1, azimuth=np.pi/2)
-    n = x2.update(data=dat2, azimuth=0)
+    time_delay = 0.5 * (x1.time_delay + x2.time_delay)
+
+    e = x1.update(data=dat1, azimuth=np.pi/2, time_delay=time_delay)
+    n = x2.update(data=dat2, azimuth=0, time_delay=time_delay)
 
     return e, n
 
@@ -158,25 +182,32 @@ class MTChannel(SimpleBase):
         data = self.data.reshape(-1)[:-n_leftovers].reshape(n_divisions, -1)
         return self.update(data=data)
 
+    def frequency_spectrum(self):
+        data = self.data
+        n_d = data.shape[-1]
+        f_data = np.fft.rfft(data)[...,1:]
+        freqs = np.fft.rfftfreq(n_d, self.sample_rate)[1:]
+        f_data *= np.exp(1j * 2 * np.pi * freqs * self.time_delay)
+
+        # adjust columns of fft for phases based off of start times:
+        n_wins = data.shape[0]
+        dt_wins = n_wins / self.sample_rate
+        window_starts = dt_wins * np.arange(n_wins)
+        f_data *= np.exp(1j * 2 * np.pi * freqs[None, :] * window_starts[:, None])
+
+        pair_class = SPECTRUM_PAIRS[type(self)]
+        spec = pair_class(
+            f_data, self.azimuth, start_time=0, gain=self.gain,
+            zpk_filter=self.zpk_filter, sample_rate=self.sample_rate,
+        )
+        return spec
 
 class ElectricChannel(MTChannel):
-
-    def frequency_spectrum(self):
-        f_data = np.fft.rfft(self.data)[...,1:]
-        freqs = np.fft.rfftfreq(self.data.shape[-1], self.sample_rate)[1:]
-        f_data *= np.exp(1j * 2 * np.pi * freqs * self.time_delay)
-        spec = ElectricalSpectrum(f_data, self.azimuth, self.zpk_filter, self.gain, self.start_time, self.sample_rate, time_delay=0)
-        return spec
+    pass
 
 
 class MagneticChannel(MTChannel):
-
-    def frequency_spectrum(self):
-        f_data = np.fft.rfft(self.data)[...,1:]
-        freqs = np.fft.rfftfreq(self.data.shape[-1], self.sample_rate)[1:]
-        f_data *= np.exp(1j * 2 * np.pi * freqs * self.time_delay)
-        spec = MagneticSpectrum(f_data, self.azimuth, self.zpk_filter, self.gain, self.start_time, self.sample_rate, time_delay=0)
-        return spec
+    pass
 
 
 class MTSpectrum(SimpleBase):
@@ -228,7 +259,14 @@ class MTTimeChannelCollection():
                 raise TypeError("Channels must have the same sample rate.")
             elif channel.data.shape != ex.data.shape:
                 raise TypeError("Channels must have the number of data.")
-        self.channels = channels
+        self.ex = ex
+        self.ey = ey
+        self.hx = hx
+        self.hy = hy
+
+    @property
+    def channels(self):
+        return [self.ex, self.ey, self.hx, self.hy]
 
     @property
     def start_time(self):
@@ -239,28 +277,40 @@ class MTTimeChannelCollection():
         return self.channels[0].sample_rate
 
     @property
+    def shape(self):
+        return (4, *self.channels[0].shape)
+
+    @property
     def data_shape(self):
-        return self.channels[0].data.shape
+        return self.channels[0].shape
+
+    def to_dict(self):
+        return {
+            "ex": self.channels[0].to_dict(),
+            "ey": self.channels[1].to_dict(),
+            "hx": self.channels[2].to_dict(),
+            "hy": self.channels[3].to_dict(),
+        }
 
     def to_json(self, file_name=None):
-        out = []
-        for i_c, channel in enumerate(self.channels):
-            out.append((type(channel).__name__, channel.to_json()))
+        self_dict = self.to_dict()
         if file_name is None:
-            return json.dumps(out)
-        with open(file_name, 'w') as f:
-            json.dump(out, f, cls=MTSimpleEncoder)
+            return json.dumps(self_dict, cls=MTSimpleEncoder)
+        else:
+            with open(file_name, "w") as f:
+                json.dump(self_dict, f, cls=MTSimpleEncoder)
 
     @classmethod
     def from_json(cls, file_name):
         with open(file_name, 'r') as f:
-            channel_list = json.load(f)
-        ch_list = []
-        for channel_dat in channel_list:
-            cls = CLASS_NAME_TO_CLASS[channel_dat[0]]
-            ch_list.append(cls.from_json_string(channel_dat[1]))
+            in_dict = json.load(f, cls=MTSimpleDecoder)
 
-        return cls(*ch_list)
+        ex = ElectricChannel(**in_dict["ex"])
+        ey = ElectricChannel(**in_dict["ey"])
+        hx = MagneticChannel(**in_dict["hx"])
+        hy = MagneticChannel(**in_dict["hy"])
+
+        return cls(ex=ex, ey=ey, hx=hx, hy=hy)
 
     def frequency_spectrum(self):
         fs = []
@@ -287,9 +337,14 @@ class MTTimeChannelCollection():
         return type(self)(*fs)
 
     def orient(self):
-        ex, ey = geographic_orient(*self.channels[:2])
-        hx, hy = geographic_orient(*self.channels[2:])
+        ex, ey = geographic_orient(self.ex, self.ey)
+        hx, hy = geographic_orient(self.hx, self.hy)
         return type(self)(ex, ey, hx, hy)
+
+    def plot(self):
+        for i, channel in enumerate(self.channels):
+            plt.subplot(4, 1, i+1)
+            channel.plot()
 
 
 
@@ -311,6 +366,15 @@ class MTFrequencySpectrumCollection():
         for channel in self.channels:
             channels.append(channel.calibrate())
         return type(self)(*channels)
+
+    def calculate_transfer_funcs(self, remote=None, period_bands=None):
+        return calculate_Z(self, remote=remote, period_bands=period_bands)
+
+    def orient(self):
+        ex, ey = geographic_orient(*self.channels[:2])
+        hx, hy = geographic_orient(*self.channels[2:])
+        return type(self)(ex, ey, hx, hy)
+
 
 def _band_sum(band, where):
     band = np.broadcast_to(band[..., None], (*band.shape, where.shape[-1]))
@@ -371,6 +435,13 @@ CLASS_NAME_TO_CLASS = {
     "MTSpectrum":MTSpectrum,
     "ElectricalSpectrum":ElectricalSpectrum,
     "MagneticSpectrum":MagneticSpectrum,
+}
+
+SPECTRUM_PAIRS = {
+    ElectricChannel:ElectricalSpectrum,
+    MagneticChannel:MagneticSpectrum,
+    ElectricalSpectrum:ElectricChannel,
+    MagneticSpectrum:MagneticChannel,
 }
 
 
