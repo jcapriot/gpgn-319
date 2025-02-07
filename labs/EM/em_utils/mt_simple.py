@@ -152,6 +152,12 @@ class MTChannel(SimpleBase):
     def plot(self):
         plt.plot(self.data.T)
 
+    def split(self, n_divisions):
+        n_samples = self.data.size
+        n_leftovers = n_samples % n_divisions
+        data = self.data.reshape(-1)[:-n_leftovers].reshape(n_divisions, -1)
+        return self.update(data=data)
+
 
 class ElectricChannel(MTChannel):
 
@@ -272,6 +278,12 @@ class MTTimeChannelCollection():
         fs = []
         for channel in self.channels:
             fs.append(channel.window())
+        return type(self)(*fs)
+
+    def split(self, n_split):
+        fs = []
+        for channel in self.channels:
+            fs.append(channel.split(n_split))
         return type(self)(*fs)
 
 
