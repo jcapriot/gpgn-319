@@ -3,6 +3,7 @@ import io
 import json
 from typing import Union
 import base64
+import matplotlib.pyplot as plt
 
 import numpy as np
 import scipy.signal as sig
@@ -146,6 +147,9 @@ class MTChannel(SimpleBase):
         n_window = self.data.shape[-1]
         window = sig.windows.hamming(n_window)
         return self.update(data=self.data * window)
+
+    def plot(self):
+        plt.plot(self.data.T)
 
 
 class ElectricChannel(MTChannel):
