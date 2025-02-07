@@ -316,7 +316,7 @@ def _band_sum(band, where):
     band = np.broadcast_to(band[..., None], (*band.shape, where.shape[-1]))
     return np.add.reduce(band, axis=-2, where=where)
 
-def calculate_Z(site, remote=None, bands=None):
+def calculate_Z(site, remote=None, period_bands=None):
     if remote is None:
         remote = site
     Rxc = remote.channels[2].data.conjugate()
@@ -330,7 +330,13 @@ def calculate_Z(site, remote=None, bands=None):
 
     f = site.channels[0].frequencies
 
-    if bands is not None:
+    if period_bands is not None:
+        freq_bands = 1.0 / period_bands[::-1]
+        lowers = freq_bands[:-1]
+        uppers = freq_bands[1:]
+
+        bands = (f[:, None] >= lowers) & (f[:, None] < uppers)
+
         f = _band_sum(f, bands)/np.sum(bands, axis=0)
         func = lambda x : np.sum(_band_sum(x, where=bands), axis=0)
     else:
@@ -374,7 +380,7 @@ def get_overlapping_series(
 ):
     if x1.sample_rate != x2.sample_rate:
         raise ValueError("x1 and x2 must have the same sample rate.")
-    if x1.data.shape[:-1] != x2.data.shape[:-1]:
+    if x1.data_shape[:-1] != x2.data_shape[:-1]:
         raise ValueError("x1 and x2 must have the same shape up to the last dimension.")
     if isinstance(x1, MTChannel) and not isinstance(x2, MTChannel):
         raise ValueError("x1 and x2 must be both MTChannel.")
@@ -387,8 +393,8 @@ def get_overlapping_series(
     x1_start_ind = int(d1.total_seconds() * x1.sample_rate)
     x2_start_ind = int(d2.total_seconds() * x2.sample_rate)
 
-    n1 = x1.data.shape[-1] - x1_start_ind
-    n2 = x2.data.shape[-1] - x2_start_ind
+    n1 = x1.data_shape[-1] - x1_start_ind
+    n2 = x2.data_shape[-1] - x2_start_ind
     n_new = min(n1, n2)
     if isinstance(x1, MTChannel):
         channels1 = [x1]
@@ -403,14 +409,14 @@ def get_overlapping_series(
     new_c1s = []
     new_c2s = []
     for c1, c2 in zip(channels1, channels2):
-        dat1 = c1.data[x1_start_ind:x1_start_ind + n_new]
-        dat2 = c1.data[x2_start_ind:x2_start_ind + n_new]
+        dat1 = c1.data[..., x1_start_ind:x1_start_ind + n_new]
+        dat2 = c2.data[..., x2_start_ind:x2_start_ind + n_new]
 
         new_c1s.append(c1.update(data=dat1, start_time=start))
         new_c2s.append(c2.update(data=dat2, start_time=start))
     if isinstance(x1, MTChannel):
         return new_c1s[0], new_c2s[0]
     else:
-        new_collec1 = MTTimeChannelCollection(new_c1s)
-        new_collec2 = MTTimeChannelCollection(new_c2s)
+        new_collec1 = MTTimeChannelCollection(*new_c1s)
+        new_collec2 = MTTimeChannelCollection(*new_c2s)
         return new_collec1, new_collec2
