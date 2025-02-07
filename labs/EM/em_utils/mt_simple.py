@@ -129,8 +129,8 @@ def geographic_orient(x1 : SimpleBase, x2: SimpleBase):
     dat1 = r_east_north[..., 0].reshape(data_shape)
     dat2 = r_east_north[..., 1].reshape(data_shape)
 
-    e = x1.update(data=dat1)
-    n = x2.update(data=dat2)
+    e = x1.update(data=dat1, azimuth=np.pi/2)
+    n = x2.update(data=dat2, azimuth=0)
 
     return e, n
 
@@ -287,8 +287,10 @@ class MTTimeChannelCollection():
         return type(self)(*fs)
 
     def orient(self):
-        ex, ey = self.channels[:2]
-        hx, hy = self.channels[2:]
+        ex, ey = geographic_orient(*self.channels[:2])
+        hx, hy = geographic_orient(*self.channels[2:])
+        return type(self)(ex, ey, hx, hy)
+
 
 
 class MTFrequencySpectrumCollection():
