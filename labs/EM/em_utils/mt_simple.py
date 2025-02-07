@@ -198,6 +198,9 @@ class MTSpectrum(SimpleBase):
 
         return self.update(data=f_data, gain=[], zpk_filter=[])
 
+    def plot(self):
+        plt.loglog(self.frequencies, np.abs(self.data.T))
+
 
 class ElectricalSpectrum(MTSpectrum):
     pass
