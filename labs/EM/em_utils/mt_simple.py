@@ -178,8 +178,8 @@ class MTChannel(SimpleBase):
 
     def split(self, n_divisions):
         n_samples = self.data.size
-        n_leftovers = n_samples % n_divisions
-        data = self.data.reshape(-1)[:-n_leftovers].reshape(n_divisions, -1)
+        end = n_samples  - (n_samples % n_divisions)
+        data = self.data.reshape(-1)[:end].reshape(n_divisions, -1)
         return self.update(data=data)
 
     def frequency_spectrum(self):
@@ -187,13 +187,13 @@ class MTChannel(SimpleBase):
         n_d = data.shape[-1]
         f_data = np.fft.rfft(data)[...,1:]
         freqs = np.fft.rfftfreq(n_d, self.sample_rate)[1:]
-        f_data *= np.exp(1j * 2 * np.pi * freqs * self.time_delay)
+        f_data *= np.exp(-2j * np.pi * freqs * self.time_delay)
 
         # adjust columns of fft for phases based off of start times:
         n_wins = data.shape[0]
         dt_wins = n_wins / self.sample_rate
         window_starts = dt_wins * np.arange(n_wins)
-        f_data *= np.exp(1j * 2 * np.pi * freqs[None, :] * window_starts[:, None])
+        f_data *= np.exp(-2j * np.pi * freqs[None, :] * window_starts[:, None])
 
         pair_class = SPECTRUM_PAIRS[type(self)]
         spec = pair_class(
